@@ -12,9 +12,9 @@ slim = tf.contrib.slim
 flags = tf.app.flags
 
 #Directories
-flags.DEFINE_string('dataset_dir', './dataset', 'The dataset directory to find the train, validation and test images.')
-flags.DEFINE_string('checkpoint_dir', './log/original', 'The checkpoint directory to restore your mode.l')
-flags.DEFINE_string('logdir', './log/original_test', 'The log directory for event files created during test evaluation.')
+flags.DEFINE_string('dataset_dir', '../dataset', 'The dataset directory to find the train, validation and test images.')
+flags.DEFINE_string('checkpoint_dir', '../log/original', 'The checkpoint directory to restore your mode.l')
+flags.DEFINE_string('logdir', '../log/original_test', 'The log directory for event files created during test evaluation.')
 flags.DEFINE_boolean('save_images', True, 'If True, saves 10 images to your logdir for visualization.')
 
 #Evaluation information
@@ -130,9 +130,12 @@ def run():
                 logging.info('Saving the images now...')
                 for step in range(int(num_steps_per_epoch * num_epochs)):
                     start_time = time.time()
-                    predictions_val, filename_val = sess.run([predictions, filenames])
+                    predictions_val, filename_val, pro, pre = sess.run([predictions, filenames, probabilities, predictions])
                     time_elapsed = time.time() - start_time
                     logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
+                    if step==0:
+                        print pro[0]
+                        print pre[0]
                     
                     #Save the image visualizations
                     for i in xrange(batch_size):
