@@ -2,28 +2,24 @@ import tensorflow as tf
 from tensorflow.contrib.framework.python.ops.variables import get_or_create_global_step
 from tensorflow.python.platform import tf_logging as logging
 from enet import ENet, ENet_arg_scope
-from preprocessing import preprocess, postprocess
+from preprocessing import preprocess, postprocess, get_slice_num, produce_color_segmentation
 import os, glob, time, cv2
 import numpy as np
-import matplotlib.pyplot as plt
 slim = tf.contrib.slim
 
 #============INPUT ARGUMENTS================
 flags = tf.app.flags
 
 #Directories
-flags.DEFINE_string('dataset_dir', '../dataset', 'The dataset directory to find the train, validation and test images.')
 flags.DEFINE_string('checkpoint_dir', '../log/original', 'The checkpoint directory to restore your mode.l')
 flags.DEFINE_string('logdir', '../log/original_test', 'The log directory for event files created during test evaluation.')
 flags.DEFINE_boolean('save_images', True, 'If True, saves 10 images to your logdir for visualization.')
+flags.DEFINE_string('dataset', "CamVid", 'Which dataset to test')
 
 #Evaluation information
 flags.DEFINE_integer('num_classes', 12, 'The number of classes to predict.')
-flags.DEFINE_integer('batch_size', 10, 'The batch_size for evaluation.')
 flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
-flags.DEFINE_integer('num_epochs', 1, "The number of epochs to evaluate your model.")
-flags.DEFINE_string('dataset', "CamVid", 'Which dataset to test')
 
 #Architectural changes
 flags.DEFINE_integer('num_initial_blocks', 1, 'The number of initial blocks to use in ENet.')
@@ -34,19 +30,16 @@ FLAGS = flags.FLAGS
 
 #==========NAME HANDLING FOR CONVENIENCE==============
 num_classes = FLAGS.num_classes
-batch_size = FLAGS.batch_size
 image_height = FLAGS.image_height
 image_width = FLAGS.image_width
-num_epochs = FLAGS.num_epochs
 save_images = FLAGS.save_images
-print image_height, image_width
+batch_size = get_slice_num(image_height, image_width)
 
 #Architectural changes
 num_initial_blocks = FLAGS.num_initial_blocks
 stage_two_repeat = FLAGS.stage_two_repeat
 skip_connections = FLAGS.skip_connections
 
-dataset_dir = FLAGS.dataset_dir
 checkpoint_dir = FLAGS.checkpoint_dir
 photo_dir = os.path.join(FLAGS.logdir, "images")
 logdir = FLAGS.logdir
@@ -58,15 +51,18 @@ checkpoint_file = tf.train.latest_checkpoint(checkpoint_dir)
 
 #Dataset directories
 if dataset=="CamVid":
+  dataset_dir = "../dataset"	#Change dataset location => modify here
   image_files = os.path.join(dataset_dir, "val", "*.png")
 elif dataset=="Cityscapes":
+  dataset_dir = "../cityscapes"	#Change dataset location => modify here
   image_files = os.path.join(dataset_dir, "demo", "*", "*.png")
-  print image_files
+else:
+  image_files = os.path.join("../cityscapes", "leftImg8bit",  "val", "frankfurt", "frankfurt_000000_000294_leftImg8bit.png")
+
 image_files = glob.glob(image_files)
 image_files.sort()
-print image_files
 
-num_batches_per_epoch = len(image_files) / batch_size
+num_batches_per_epoch = len(image_files)
 num_steps_per_epoch = num_batches_per_epoch
 
 #=============EVALUATION=================
@@ -76,6 +72,7 @@ def run():
 
         #===================TEST BRANCH=======================
         #Load the files into one input queue
+        print image_files
         images = tf.convert_to_tensor(image_files)
         input_queue = tf.train.slice_input_producer([images])
         
@@ -85,8 +82,12 @@ def run():
         image = tf.image.decode_image(image, channels=3)
         
         #preprocess and batch up the image and annotation
-        preprocessed_image = preprocess(image, None, image_height, image_width)
-        images, filenames = tf.train.batch([preprocessed_image, filename], batch_size=batch_size, allow_smaller_final_batch=True)
+        preprocessed_images, correspond_filenames, image_codes = preprocess(image, None, image_height, image_width, filename)
+        process_queue = tf.train.slice_input_producer([preprocessed_images, correspond_filenames, image_codes], shuffle=False)
+        image = process_queue[0]
+        filename = process_queue[1]
+        code = process_queue[2]
+        images, filenames, codes = tf.train.batch([image, filename, code], batch_size=batch_size, allow_smaller_final_batch=True)
         
         #Create the model inference
         with slim.arg_scope(ENet_arg_scope()):
@@ -110,10 +111,6 @@ def run():
         #State the metrics that you want to predict. We get a predictions that is not one_hot_encoded.
         predictions = tf.argmax(probabilities, -1)
 
-        #Create the global step and an increment op for monitoring
-        global_step = get_or_create_global_step()
-        global_step_op = tf.assign(global_step, global_step + 1) #no apply_gradient method so manually increasing the global_step
-
         #Define your supervisor for running a managed session. Do not run the summary_op automatically or else it will consume too much memory
         sv = tf.train.Supervisor(logdir = logdir, summary_op = None, init_fn=restore_fn)
 
@@ -126,23 +123,23 @@ def run():
                     os.mkdir(photo_dir)
 
                 #Segmentation
-                logging.info('Total Steps: %d', int(num_steps_per_epoch * num_epochs))
+                logging.info('Total Steps: %d', int(num_steps_per_epoch))
                 logging.info('Saving the images now...')
-                for step in range(int(num_steps_per_epoch * num_epochs)):
+                for step in range(int(num_steps_per_epoch)):
                     start_time = time.time()
-                    predictions_val, filename_val, pro, pre = sess.run([predictions, filenames, probabilities, predictions])
+                    predictions_val, filename_val, image_val = sess.run([predictions, filenames, images])
                     time_elapsed = time.time() - start_time
                     logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
-                    if step==0:
-                        print pro[0]
-                        print pre[0]
                     
-                    #Save the image visualizations
-                    for i in xrange(batch_size):
-                        filename_val_single = filename_val[i].split('/')
-                        filename_val_single = filename_val_single[len(filename_val_single)-1]
-                        segmentation = postprocess(predictions_val[i], image_height, image_width, dataset)
-                        cv2.imwrite(photo_dir+"/image_" + filename_val_single, segmentation)
+                    combine = postprocess(predictions_val, image_height, image_width)
+                    segmentation = produce_color_segmentation(combine, image_height, image_width, "Cityscapes")
+                    filename = filename_val[0][0].split('/')
+                    filename = filename[len(filename)-1]
+                    filename1 = photo_dir+"/result_" + filename
+                    filename2 = photo_dir+"/image_" + filename
+                    cv2.imwrite(filename1, segmentation)
+                    image_combine = postprocess(image_val, image_height, image_width, True)
+                    cv2.imwrite(filename2, image_combine)
 
 if __name__ == '__main__':
     run()

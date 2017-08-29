@@ -1,3 +1,4 @@
+from tensorflow.python.platform import tf_logging as logging
 import tensorflow as tf
 import numpy as np
 import sys
@@ -121,7 +122,7 @@ def overlap_random_choose(imageA, imageB):
     result = imageA*maskA + imageB*maskB
     return result
 
-def postprocess(images, height=360, width=480):
+def postprocess(images, height=360, width=480, rgb=False):
     '''
     Combine images back to origin size.
     
@@ -143,15 +144,23 @@ def postprocess(images, height=360, width=480):
     col_stride = input_width - col_overlap
     
     #Prepare images
-    image = np.zeros([height, width])
+    if rgb==True:
+      image = np.zeros([height, width, 3])
+    else:
+      image = np.zeros([height, width])
     
     #Combining
     for row in xrange(rows):
         for col in xrange(cols):
             row_leftup = int(row*row_stride)
             col_leftup = int(col*col_stride)
-            image[row_leftup:row_leftup+input_height, col_leftup:col_leftup+input_width] = images[row*cols+col]
-            
+            if rgb==True:
+              image[row_leftup:row_leftup+input_height, col_leftup:col_leftup+input_width, :] = images[row*cols+col, :]
+            else:
+              image[row_leftup:row_leftup+input_height, col_leftup:col_leftup+input_width] = images[row*cols+col]
+    if rgb==True:
+      image = convert_to_opencv_form(image)
+      
     return image
                 
 
