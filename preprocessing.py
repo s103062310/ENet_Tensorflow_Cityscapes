@@ -22,6 +22,36 @@ def get_slice_num(height=360, width=480):
     slice_num = rows*cols
     return slice_num
 
+def preprocess_ori(image, annotation=None, height=360, width=480):
+    '''
+    Performs preprocessing for one set of image and annotation for feeding into network.
+    NO scaling of any sort will be done as per original paper.
+    INPUTS:
+    - image (Tensor): the image input 3D Tensor of shape [height, width, 3]
+    - annotation (Tensor): the annotation input 3D Tensor of shape [height, width, 1]
+    - height (int): the output height to reshape the image and annotation into
+    - width (int): the output width to reshape the image and annotation into
+    OUTPUTS:
+    - preprocessed_image(Tensor): the reshaped image tensor
+    - preprocessed_annotation(Tensor): the reshaped annotation tensor
+    '''
+
+    #Convert the image and annotation dtypes to tf.float32 if needed
+    if image.dtype != tf.float32:
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+        # image = tf.cast(image, tf.float32)
+
+    image = tf.image.resize_image_with_crop_or_pad(image, height, width)
+    image.set_shape(shape=(height, width, 3))
+
+    if not annotation == None:
+        annotation = tf.image.resize_image_with_crop_or_pad(annotation, height, width)
+        annotation.set_shape(shape=(height, width, 1))
+
+        return image, annotation
+
+    return image
+
 def preprocess(image, annotation=None, height=360, width=480, filename=None):
     '''
     Performs preprocessing for one set of image and annotation for feeding into network.
@@ -219,6 +249,16 @@ def produce_color_segmentation(prediction, height=360, width=480, dataset="CamVi
               [119,  11,  32],    # 18   bicycle
               [  0,   0,   0]     # 19   don't care
         ]
+    elif dataset=="NYU":
+        class_num = 5
+        color_map = [
+            #   R    G    B         ID   class
+              [  0,   0,   0],    #  0   don't care
+              [147, 161, 161],    #  1   structure
+              [181, 137,   0],    #  2   prop
+              [203,  75,  22],    #  3   furniture
+              [  7,  54,  66],    #  4   floor
+        ]
     else:
         logging.info("no specify dataset!")
         sys.exit(0)
@@ -238,7 +278,7 @@ def produce_color_segmentation(prediction, height=360, width=480, dataset="CamVi
     segmentationR = np.reshape(segmentationR, [height, width, 1])
     segmentationG = np.reshape(segmentationG, [height, width, 1])
     segmentationB = np.reshape(segmentationB, [height, width, 1])
-    segmentation = np.concatenate((segmentationR, segmentationG, segmentationB), axis=2)
+    segmentation = np.concatenate((segmentationB, segmentationG, segmentationR), axis=2)
     
     return segmentation.astype(np.uint8)
     
@@ -263,6 +303,9 @@ def one_hot(annotations, batch_num, dataset="CamVid"):
         annotations_one_hot_19 = tf.slice(annotations_one_hot_256, [0, 0, 0, 0], [batch_num, input_height, input_width, 19])
         annotations_one_hot_255 = tf.slice(annotations_one_hot_256, [0, 0, 0, 254], [batch_num, input_height, input_width, 1])
         annotations_one_hot = tf.concat([annotations_one_hot_19, annotations_one_hot_255], axis=3)
+        return annotations_one_hot
+    elif dataset=="NYU":
+        annotations_one_hot = tf.one_hot(annotations, 5, axis=-1)
         return annotations_one_hot
     logging.info("one hot transfer error")
     sys.exit(0)

@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.contrib.framework.python.ops.variables import get_or_create_global_step
 from tensorflow.python.platform import tf_logging as logging
 from enet import ENet, ENet_arg_scope
-from preprocessing import preprocess, postprocess, one_hot, input_height, input_width, get_slice_num, produce_color_segmentation
+from preprocessing import preprocess_ori, one_hot, produce_color_segmentation
 from get_class_weights import ENet_weighing, median_frequency_balancing
 import os, glob, time, cv2
 import numpy as np
@@ -19,9 +19,10 @@ flags.DEFINE_string('dataset', "CamVid", 'Which dataset to train')
 
 #Training arguments
 flags.DEFINE_integer('num_classes', 12, 'The number of classes to predict.')
-flags.DEFINE_integer('batch_size', 10, 'The batch_size for training.')
+flags.DEFINE_integer('batch_size', 5, 'The batch_size for training.')
 flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
+flags.DEFINE_integer('eval_batch_size', 5, 'The batch_size for validation.')
 flags.DEFINE_integer('num_epochs', 300, "The number of epochs to train your model.")
 flags.DEFINE_integer('num_epochs_before_decay', 100, 'The number of epochs before decaying your learning rate.')
 flags.DEFINE_float('weight_decay', 2e-4, "The weight decay for ENet convolution layers.")
@@ -41,7 +42,7 @@ num_classes = FLAGS.num_classes
 batch_size = FLAGS.batch_size
 image_height = FLAGS.image_height
 image_width = FLAGS.image_width
-eval_batch_size = get_slice_num(image_height, image_width)
+eval_batch_size = FLAGS.eval_batch_size
 combine_dataset = FLAGS.combine_dataset
 dataset = FLAGS.dataset
 
@@ -87,6 +88,14 @@ elif dataset=="Cityscapes":
     image_val_files = os.path.join(dataset_dir, "leftImg8bit", "val", "*", "*_leftImg8bit.png")
     annotation_val_files = os.path.join(dataset_dir, "gtFine", "val", "*", "*_gtFine_labelTrainIds.png")
 
+#NYU
+elif dataset=="NYU":
+    dataset_dir = "../NYU"	#Change dataset location => modify here
+    image_files = os.path.join(dataset_dir, "training", "*", "*_colors.png")
+    annotation_files = os.path.join(dataset_dir, "training", "*", "*_ground_truth_id.png")
+    image_val_files = os.path.join(dataset_dir, "testing", "*", "*_colors.png")
+    annotation_val_files = os.path.join(dataset_dir, "testing", "*", "*_ground_truth_id.png")
+
 #Get complete file path
 image_files = glob.glob(image_files)
 annotation_files = glob.glob(annotation_files)
@@ -103,7 +112,7 @@ if combine_dataset:
     annotation_files += annotation_val_files
 
 #Know the number steps to take before decaying the learning rate and batches per epoch
-num_batches_per_epoch = len(image_files) * eval_batch_size / batch_size
+num_batches_per_epoch = len(image_files) / batch_size
 num_steps_per_epoch = num_batches_per_epoch
 decay_steps = int(num_epochs_before_decay * num_steps_per_epoch)
 
@@ -171,15 +180,10 @@ def run():
         annotation = tf.image.decode_image(annotation)
 
         #preprocess the images and annotations
-        preprocessed_images, preprocessed_annotations, correspond_filenames, image_codes = preprocess(image, annotation, image_height, image_width, filename)
-        process_queue = tf.train.slice_input_producer([preprocessed_images, preprocessed_annotations, correspond_filenames, image_codes])
-        image = process_queue[0]
-        annotation = process_queue[1]
-        filename = process_queue[2]
-        code = process_queue[3]
+        preprocessed_image, preprocessed_annotation = preprocess_ori(image, annotation, image_height, image_width)
         
         #Batch up the images and annotations
-        images, annotations, filenames, codes = tf.train.batch([image, annotation, filename, code], batch_size=batch_size, allow_smaller_final_batch=True)
+        images, annotations = tf.train.batch([preprocessed_image, preprocessed_annotation], batch_size=batch_size, allow_smaller_final_batch=True)
 
         #Create the model inference
         with slim.arg_scope(ENet_arg_scope(weight_decay=weight_decay)):
@@ -193,7 +197,7 @@ def run():
                                          skip_connections=skip_connections)
         
         #perform one-hot-encoding on the ground truth annotation to get same shape as the logits
-        annotations = tf.reshape(annotations, shape=[batch_size, input_height, input_width])
+        annotations = tf.reshape(annotations, shape=[batch_size, image_height, image_width])
         annotations_ohe = one_hot(annotations, batch_size, dataset)
         
         #Actually compute the loss
@@ -252,15 +256,10 @@ def run():
         annotation_val = tf.image.decode_png(annotation_val)
 
         #preprocess the images and annotations
-        preprocessed_images_val, preprocessed_annotations_val, correspond_filenames_val, image_codes_val = preprocess(image_val, annotation_val, image_height, image_width, filename_val)
-        process_queue_val = tf.train.slice_input_producer([preprocessed_images_val, preprocessed_annotations_val, correspond_filenames_val, image_codes_val], shuffle=False)
-        image_val = process_queue_val[0]
-        annotation_val = process_queue_val[1]
-        filename_val = process_queue_val[2]
-        code_val = process_queue_val[3]
+        preprocessed_image_val, preprocessed_annotation_val = preprocess_ori(image_val, annotation_val, image_height, image_width)
         
         #Batch up the image and annotation
-        images_val, annotations_val, filenames_val, codes_val = tf.train.batch([image_val, annotation_val, filename_val, code_val], batch_size=eval_batch_size, allow_smaller_final_batch=True)
+        images_val, annotations_val, filenames_val = tf.train.batch([preprocessed_image_val, preprocessed_annotation_val, filename_val], batch_size=eval_batch_size, allow_smaller_final_batch=True)
 
         with slim.arg_scope(ENet_arg_scope(weight_decay=weight_decay)):
             logits_val, probabilities_val = ENet(images_val,
@@ -273,7 +272,7 @@ def run():
                                                  skip_connections=skip_connections)
 
         #perform one-hot-encoding on the ground truth annotation to get same shape as the logits
-        annotations_val = tf.reshape(annotations_val, shape=[eval_batch_size, input_height, input_width])
+        annotations_val = tf.reshape(annotations_val, shape=[eval_batch_size, image_height, image_width])
         annotations_ohe_val = one_hot(annotations_val, batch_size, dataset)
 
         #State the metrics that you want to predict. We get a predictions that is not one_hot_encoded. ----> Should we use OHE instead?
@@ -284,9 +283,9 @@ def run():
 
         #Create an output for showing the segmentation output of validation images
         segmentation_output_val = tf.cast(predictions_val, dtype=tf.float32)
-        segmentation_output_val = tf.reshape(segmentation_output_val, shape=[-1, input_height, input_width, 1])
+        segmentation_output_val = tf.reshape(segmentation_output_val, shape=[-1, image_height, image_width, 1])
         segmentation_ground_truth_val = tf.cast(annotations_val, dtype=tf.float32)
-        segmentation_ground_truth_val = tf.reshape(segmentation_ground_truth_val, shape=[-1, input_height, input_width, 1])
+        segmentation_ground_truth_val = tf.reshape(segmentation_ground_truth_val, shape=[-1, image_height, image_width, 1])
 
         def eval_step(sess, metrics_op):
             '''
@@ -335,7 +334,7 @@ def run():
                     #Check the validation data only at every third of an epoch
                     num_to_val = num_steps_per_epoch * 5
                     if step % num_to_val == num_to_val-1:
-                        for i in xrange(len(image_val_files)):
+                        for i in xrange(len(image_val_files) / eval_batch_size):
                             validation_accuracy, validation_mean_IOU = eval_step(sess, metrics_op_val)
 
                     summaries = sess.run(my_summary_op)
@@ -361,20 +360,20 @@ def run():
                     os.mkdir(photo_dir)
                 
                 #Plot the predictions - check validation images only
-                logging.info('Total Steps: %d', len(image_val_files))
+                logging.info('Total Steps: %d', len(image_val_files) / eval_batch_size)
                 logging.info('Saving the images now...')
-                for step in xrange(len(image_val_files)):
+                for step in xrange(len(image_val_files) / eval_batch_size):
                     start_time = time.time()
-                    predictions_value, filenames_value, codes_value = sess.run([predictions_val, filenames_val, codes_val])
+                    predictions_value, filenames_value = sess.run([predictions_val, filenames_val])
                     time_elapsed = time.time() - start_time
-                    logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, 1/time_elapsed)
+                    logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, eval_batch_size/time_elapsed)
                     
-                    combine = postprocess(predictions_value, image_height, image_width)
-                    segmentation = produce_color_segmentation(combine, image_height, image_width, dataset)
-                    filename = filenames_value[0][0].split('/')
-                    filename = filename[len(filename)-1]
-                    filename = photo_dir+"/image_" + filename
-                    cv2.imwrite(filename, segmentation)
+                    for i in xrange(eval_batch_size):
+                        segmentation = produce_color_segmentation(predictions_value[i], image_height, image_width, dataset)
+                        filename = filenames_value[i].split('/')
+                        filename = filename[len(filename)-1]
+                        filename = photo_dir+"/trainResult_" + filename
+                        cv2.imwrite(filename, segmentation)
             
             print time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
