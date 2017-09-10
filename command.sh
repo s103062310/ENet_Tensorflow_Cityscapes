@@ -9,9 +9,11 @@ python train_enet.py --weighting="ENET" --num_epochs=300 --logdir="../log/train_
 python train_enet.py --weighting="MFB" --num_epochs=300 --logdir="../log/train_original_MFB"
 
 # CamVid
-python train_enet.py --weighting="ENET" --num_epochs=300 --logdir="../log/train_original_ENet"
+python train_enet.py --weighting="ENET" --num_epochs=300 --logdir="../log/train_original_ENet_Cam"
 # Cityscapes
-python train_enet.py --weighting="ENET" --num_epochs=50 --num_classes=20 --image_height=1024 --image_width=2048 --dataset="Cityscapes" --logdir="../log/train_original_ENet"
+python train_enet.py --weighting="ENET" --num_epochs=50 --num_classes=20 --image_height=1024 --image_width=2048 --dataset="Cityscapes" --logdir="../log/train_original_ENet_City"
+#NYU
+python train_enet.py --weighting="ENET" --num_epochs=500 --num_classes=5 --image_height=480 --image_width=640 --dataset="NYU" --logdir="../log/train_original_ENet_NYU"
 
 
 # =============== TEST ===============
@@ -22,7 +24,9 @@ python test_enet.py --checkpoint_dir="../log/train_original_MFB_combined_data" -
 # CamVid
 python test_enet.py --checkpoint_dir="../log/train_original_ENet" --logdir="../log/test_original_ENet"
 # Cityscapes
-python test_enet.py --num_classes=20 --image_height=1024 --image_width=2048 --dataset="Cityscapes" --checkpoint_dir="../log/train_original_ENet" --logdir="../log/test_original_ENet"
+python test_enet.py --num_classes=20 --image_height=1024 --image_width=2048 --dataset="Cityscapes" --checkpoint_dir="../log/train_original_ENet_City" --logdir="../log/test_original_ENet_City"
+#NYU
+python test_enet.py --num_classes=5 --image_height=480 --image_width=640 --dataset="NYU" --checkpoint_dir="../log/train_original_ENet_NYU" --logdir="../log/test_original_ENet_NYU"
 
 
 # =============== DEMO ===============

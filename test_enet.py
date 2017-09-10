@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.contrib.framework.python.ops.variables import get_or_create_global_step
 from tensorflow.python.platform import tf_logging as logging
 from enet import ENet, ENet_arg_scope
-from preprocessing import preprocess, postprocess, one_hot, input_height, input_width, get_slice_num, produce_color_segmentation
+from preprocessing import preprocess_ori, one_hot, produce_color_segmentation
 import os, glob, cv2, time
 import numpy as np
 slim = tf.contrib.slim
@@ -13,14 +13,14 @@ flags = tf.app.flags
 #Directories
 flags.DEFINE_string('checkpoint_dir', '../log/original', 'The checkpoint directory to restore your mode.l')
 flags.DEFINE_string('logdir', '../log/original_test', 'The log directory for event files created during test evaluation.')
-flags.DEFINE_boolean('save_images', True, 'If True, saves 10 images to your logdir for visualization.')
+flags.DEFINE_boolean('save_images', False, 'If True, saves 10 images to your logdir for visualization.')
 flags.DEFINE_string('dataset', "CamVid", 'Which dataset to train')
 
 #Evaluation information
 flags.DEFINE_integer('num_classes', 12, 'The number of classes to predict.')
 flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
-flags.DEFINE_integer('num_epochs', 1, "The number of epochs to evaluate your model.")
+flags.DEFINE_integer('batch_size', 5, 'The batch_size for testing.')
 
 #Architectural changes
 flags.DEFINE_integer('num_initial_blocks', 1, 'The number of initial blocks to use in ENet.')
@@ -33,8 +33,7 @@ FLAGS = flags.FLAGS
 num_classes = FLAGS.num_classes
 image_height = FLAGS.image_height
 image_width = FLAGS.image_width
-num_epochs = FLAGS.num_epochs
-batch_size = get_slice_num(image_height, image_width)
+batch_size = FLAGS.batch_size
 
 save_images = FLAGS.save_images
 dataset = FLAGS.dataset
@@ -64,13 +63,18 @@ elif dataset=="Cityscapes":
     dataset_dir = "../cityscapes"	#Change dataset location => modify here
     image_files = os.path.join(dataset_dir, "leftImg8bit", "val", "frankfurt", "*_leftImg8bit.png")
     annotation_files = os.path.join(dataset_dir, "gtFine", "val", "frankfurt", "*_gtFine_labelTrainIds.png")
+#NYU
+elif dataset=="NYU":
+    dataset_dir = "../NYU"	#Change dataset location => modify here
+    image_files = os.path.join(dataset_dir, "training", "*", "*_colors.png")
+    annotation_files = os.path.join(dataset_dir, "training", "*", "*_ground_truth_id.png")
 
 image_files = glob.glob(image_files)
 image_files.sort()
 annotation_files = glob.glob(annotation_files)
 annotation_files.sort()
 
-num_batches_per_epoch = len(image_files)
+num_batches_per_epoch = len(image_files) / batch_size
 num_steps_per_epoch = num_batches_per_epoch
 
 #=============EVALUATION=================
@@ -92,13 +96,8 @@ def run():
         annotation = tf.image.decode_image(annotation)
         
         #preprocess and batch up the image and annotation
-        preprocessed_images, preprocessed_annotations, correspond_filenames, image_codes = preprocess(image, annotation, image_height, image_width, filename)
-        process_queue = tf.train.slice_input_producer([preprocessed_images, preprocessed_annotations, correspond_filenames, image_codes], shuffle=False)
-        image = process_queue[0]
-        annotation = process_queue[1]
-        filename = process_queue[2]
-        code = process_queue[3]
-        images, annotations, filenames, codes = tf.train.batch([image, annotation, filename, code], batch_size=batch_size, allow_smaller_final_batch=True)
+        preprocessed_image, preprocessed_annotation = preprocess_ori(image, annotation, image_height, image_width)
+        images, annotations, filenames = tf.train.batch([preprocessed_image, preprocessed_annotation, filename], batch_size=batch_size, allow_smaller_final_batch=True)
         
         #Create the model inference
         with slim.arg_scope(ENet_arg_scope()):
@@ -120,7 +119,7 @@ def run():
             return saver.restore(sess, checkpoint_file)
         
         #perform one-hot-encoding on the ground truth annotation to get same shape as the logits
-        annotations = tf.reshape(annotations, shape=[batch_size, input_height, input_width])
+        annotations = tf.reshape(annotations, shape=[batch_size, image_height, image_width])
         annotations_ohe = one_hot(annotations, batch_size, dataset)
 
         #State the metrics that you want to predict. We get a predictions that is not one_hot_encoded.
@@ -144,8 +143,26 @@ def run():
             time_elapsed = time.time() - start_time
 
             #Log some information
-            logging.info('Global Step %s: Streaming Accuracy: %.4f     Streaming Mean IOU: %.4f     Per-class Accuracy: %.4f (%.2f sec/step)',
-                         global_step_count, accuracy_value, mean_IOU_value, per_class_accuracy_value, time_elapsed)
+            logging.info('Global Step %s: Streaming Accuracy: %.4f     Streaming Mean IOU: %.4f     Per-class Accuracy: %.4f',
+                         global_step_count, accuracy_value, mean_IOU_value, per_class_accuracy_value)
+            
+            start_time = time.time()
+            predictions_val, filename_val = sess.run([predictions, filenames])
+            time_elapsed = time.time() - start_time
+            logging.info('\t\t%.2f(sec/step)  %.2f (fps)', time_elapsed, batch_size/time_elapsed)
+            
+            #Save the images
+            if save_images:
+                if not os.path.exists(photo_dir):
+                    os.mkdir(photo_dir)
+                
+                #Segmentation
+                for i in xrange(batch_size):
+                    segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, dataset)
+                    filename = filename_val[i].split('/')
+                    filename = filename[len(filename)-1]
+                    filename = photo_dir+"/trainResult_" + filename
+                    cv2.imwrite(filename, segmentation)
 
             return accuracy_value, mean_IOU_value, per_class_accuracy_value
 
@@ -161,14 +178,7 @@ def run():
         #Run the managed session
         with sv.managed_session() as sess:
             
-            '''for step in range(int(num_steps_per_epoch * num_epochs)):
-                #print vital information every start of the epoch as always
-                if step % num_batches_per_epoch == 0:
-                    accuracy_value, mean_IOU_value = sess.run([accuracy, mean_IOU])
-                    logging.info('Epoch: %s/%s', step / num_batches_per_epoch + 1, num_epochs)
-                    logging.info('Current Streaming Accuracy: %.4f', accuracy_value)
-                    logging.info('Current Streaming Mean IOU: %.4f', mean_IOU_value)
-                    
+            for step in range(int(num_steps_per_epoch)):                    
                 #Compute summaries every 10 steps and continue evaluating
                 if step % 10 == 0:
                     test_accuracy, test_mean_IOU, test_per_class_accuracy = eval_step(sess, metrics_op = metrics_op, global_step = sv.global_step)
@@ -185,33 +195,7 @@ def run():
             logging.info('Final Per Class Accuracy %.4f', test_per_class_accuracy)
 
             #Show end of evaluation
-            logging.info('Finished evaluating!')'''
-
-            #Save the images
-            if save_images:
-                if not os.path.exists(photo_dir):
-                    os.mkdir(photo_dir)
-                
-                #Segmentation
-                logging.info('Total Steps: %d', int(num_steps_per_epoch * num_epochs))
-                logging.info('Saving the images now...')
-                for step in range(int(num_steps_per_epoch * num_epochs)):
-                    start_time = time.time()
-                    predictions_val, filename_val, image_val = sess.run([predictions, filenames, images])
-                    time_elapsed = time.time() - start_time
-                    logging.info('step %d  %.2f(sec/step)  %.2f (fps-360*480) %.2f (fps-1024*2048)', step, time_elapsed, batch_size/time_elapsed, 1/time_elapsed)
-                    
-                    combine = postprocess(predictions_val, image_height, image_width)
-                    segmentation = produce_color_segmentation(combine, image_height, image_width, dataset)
-                    filename = filename_val[0][0].split('/')
-                    filename = filename[len(filename)-1]
-                    filename1 = photo_dir+"/result_" + filename
-                    filename2 = photo_dir+"/image_" + filename
-                    cv2.imwrite(filename1, segmentation)
-                    image_combine = postprocess(image_val, image_height, image_width, True)
-                    cv2.imwrite(filename2, image_combine)
-                    
-            print time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            logging.info('Finished evaluating!')
 
 if __name__ == '__main__':
     run()

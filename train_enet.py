@@ -13,7 +13,7 @@ flags = tf.app.flags
 
 #Directory arguments
 flags.DEFINE_string('logdir', '../log/original', 'The log directory to save your checkpoint and event files.')
-flags.DEFINE_boolean('save_images', False, 'Whether or not to save your images.')
+flags.DEFINE_boolean('save_images', True, 'Whether or not to save your images.')
 flags.DEFINE_boolean('combine_dataset', False, 'If True, combines the validation with the train dataset.')
 flags.DEFINE_string('dataset', "CamVid", 'Which dataset to train')
 
@@ -332,8 +332,8 @@ def run():
                     loss, training_accuracy, training_mean_IOU = train_step(sess, train_op, sv.global_step, metrics_op=metrics_op)
 
                     #Check the validation data only at every third of an epoch
-                    num_to_val = num_steps_per_epoch * 5
-                    if step % num_to_val == num_to_val-1:
+                    num_to_val = num_steps_per_epoch / 3
+                    if step % num_to_val == 0:
                         for i in xrange(len(image_val_files) / eval_batch_size):
                             validation_accuracy, validation_mean_IOU = eval_step(sess, metrics_op_val)
 

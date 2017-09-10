@@ -42,6 +42,9 @@ def preprocess_ori(image, annotation=None, height=360, width=480):
         # image = tf.cast(image, tf.float32)
 
     image = tf.image.resize_image_with_crop_or_pad(image, height, width)
+    image = tf.image.random_brightness(image, max_delta=63)
+    image = tf.image.random_contrast(image, lower=0.2, upper=1.8)
+    image = tf.image.per_image_standardization(image)
     image.set_shape(shape=(height, width, 3))
 
     if not annotation == None:

@@ -20,6 +20,7 @@ flags.DEFINE_string('dataset', "CamVid", 'Which dataset to test')
 flags.DEFINE_integer('num_classes', 12, 'The number of classes to predict.')
 flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
+flags.DEFINE_integer('batch_size', 5, 'The batch_size for testing.')
 
 #Architectural changes
 flags.DEFINE_integer('num_initial_blocks', 1, 'The number of initial blocks to use in ENet.')
@@ -33,7 +34,7 @@ num_classes = FLAGS.num_classes
 image_height = FLAGS.image_height
 image_width = FLAGS.image_width
 save_images = FLAGS.save_images
-batch_size = get_slice_num(image_height, image_width)
+batch_size = FLAGS.batch_size
 
 #Architectural changes
 num_initial_blocks = FLAGS.num_initial_blocks
@@ -56,6 +57,9 @@ if dataset=="CamVid":
 elif dataset=="Cityscapes":
   dataset_dir = "../cityscapes"	#Change dataset location => modify here
   image_files = os.path.join(dataset_dir, "demo", "*", "*.png")
+elif dataset=="NYU":
+  dataset_dir = "../NYU" #Change dataset location => modify here
+  image_files = os.path.join(dataset_dir, "testing", "*", "*_colors.png")
 else:
   image_files = os.path.join("../cityscapes", "leftImg8bit",  "val", "frankfurt", "frankfurt_000000_000294_leftImg8bit.png")
 
@@ -72,7 +76,6 @@ def run():
 
         #===================TEST BRANCH=======================
         #Load the files into one input queue
-        print image_files
         images = tf.convert_to_tensor(image_files)
         input_queue = tf.train.slice_input_producer([images])
         
@@ -82,12 +85,8 @@ def run():
         image = tf.image.decode_image(image, channels=3)
         
         #preprocess and batch up the image and annotation
-        preprocessed_images, correspond_filenames, image_codes = preprocess(image, None, image_height, image_width, filename)
-        process_queue = tf.train.slice_input_producer([preprocessed_images, correspond_filenames, image_codes], shuffle=False)
-        image = process_queue[0]
-        filename = process_queue[1]
-        code = process_queue[2]
-        images, filenames, codes = tf.train.batch([image, filename, code], batch_size=batch_size, allow_smaller_final_batch=True)
+        preprocessed_image = preprocess_ori(image, None, image_height, image_width)
+        images, filenames = tf.train.batch([preprocessed_image, filename], batch_size=batch_size, allow_smaller_final_batch=True)
         
         #Create the model inference
         with slim.arg_scope(ENet_arg_scope()):
@@ -127,19 +126,16 @@ def run():
                 logging.info('Saving the images now...')
                 for step in range(int(num_steps_per_epoch)):
                     start_time = time.time()
-                    predictions_val, filename_val, image_val = sess.run([predictions, filenames, images])
+                    predictions_val, filename_val = sess.run([predictions, filenames])
                     time_elapsed = time.time() - start_time
                     logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
                     
-                    combine = postprocess(predictions_val, image_height, image_width)
-                    segmentation = produce_color_segmentation(combine, image_height, image_width, "Cityscapes")
-                    filename = filename_val[0][0].split('/')
-                    filename = filename[len(filename)-1]
-                    filename1 = photo_dir+"/result_" + filename
-                    filename2 = photo_dir+"/image_" + filename
-                    cv2.imwrite(filename1, segmentation)
-                    image_combine = postprocess(image_val, image_height, image_width, True)
-                    cv2.imwrite(filename2, image_combine)
+                    for i in xrange(batch_size):
+                        segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, dataset)
+                        filename = filename_val[i].split('/')
+                        filename = filename[len(filename)-1]
+                        filename = photo_dir+"/trainResult_" + filename
+                        cv2.imwrite(filename, segmentation)
 
 if __name__ == '__main__':
     run()
