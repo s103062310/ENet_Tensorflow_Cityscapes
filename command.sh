@@ -35,4 +35,4 @@ python demo_enet.py --checkpoint_dir="../log/train_original_ENet" --logdir="../l
 # Cityscapes
 python demo_enet.py --num_classes=20 --image_height=1024 --image_width=2048 --dataset="000" --checkpoint_dir="../log/train_original_ENet_City" --logdir="../log/demo_original_ENet"
 #NYU
-python demo_enet.py --num_classes=5 --image_height=480 --image_width=640 --dataset="NYU" --checkpoint_dir="../log/train_original_ENet_NYU" --logdir="../log/demo_original_ENet_NYU"
+python demo_enet.py --num_classes=5 --image_height=480 --image_width=640 --dataset="NYU" --checkpoint_dir="../log/train_original_ENet_NYU" --photo_dir="../log/demo_original_ENet_NYU"

@@ -20,7 +20,7 @@ flags.DEFINE_string('dataset', "CamVid", 'Which dataset to test')
 flags.DEFINE_integer('num_classes', 12, 'The number of classes to predict.')
 flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
-flags.DEFINE_integer('batch_size', 5, 'The batch_size for testing.')
+flags.DEFINE_integer('batch_size', 6, 'The batch_size for testing.')
 
 #Architectural changes
 flags.DEFINE_integer('num_initial_blocks', 1, 'The number of initial blocks to use in ENet.')
@@ -60,7 +60,7 @@ elif dataset=="NYU":
   dataset_dir = "../NYU" #Change dataset location => modify here
   image_files = os.path.join(dataset_dir, "testing", "*", "*_colors.png")
 else:
-  image_files = os.path.join("../cityscapes", "leftImg8bit",  "val", "frankfurt", "frankfurt_000000_000294_leftImg8bit.png")
+  image_files = os.path.join("../demo", "*.jpg")
 
 image_files = glob.glob(image_files)
 image_files.sort()
@@ -122,24 +122,22 @@ def run():
             #Segmentation
             total_time = 0
             logging.info('Total Steps: %d', int(num_steps_per_epoch))
-            logging.info('Saving the images now...')
             for step in range(int(num_steps_per_epoch)):
                 start_time = time.time()
                 predictions_val, filename_val = sess.run([predictions, filenames])
                 time_elapsed = time.time() - start_time
                 logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
-                if step!=0:
-                    total_time = total_time + time_elapsed
+                total_time = total_time + time_elapsed
                     
                 if save_images:                    
                     for i in xrange(batch_size):
-                        segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, dataset)
+                        segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, "NYU")
                         filename = filename_val[i].split('/')
                         filename = filename[len(filename)-1]
                         filename = photo_dir+"/trainResult_" + filename
                         cv2.imwrite(filename, segmentation)
                         
-                logging.info('Average speed: %.2f fps', len(image_files)/total_time)
+            logging.info('Average speed: %.2f fps', len(image_files)/total_time)
 
 if __name__ == '__main__':
     run()
