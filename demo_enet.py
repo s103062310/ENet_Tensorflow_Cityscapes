@@ -116,22 +116,22 @@ def run():
         with sv.managed_session() as sess:
         
             #Save the images
-            if save_images:
-                if not os.path.exists(photo_dir):
-                    os.mkdir(photo_dir)
+            if not os.path.exists(photo_dir):
+                os.mkdir(photo_dir)
 
-                #Segmentation
-                total_time = 0
-                logging.info('Total Steps: %d', int(num_steps_per_epoch))
-                logging.info('Saving the images now...')
-                for step in range(int(num_steps_per_epoch)):
-                    start_time = time.time()
-                    predictions_val, filename_val = sess.run([predictions, filenames])
-                    time_elapsed = time.time() - start_time
-                    logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
-                    if step!=0:
-                        total_time = total_time + time_elapsed
+            #Segmentation
+            total_time = 0
+            logging.info('Total Steps: %d', int(num_steps_per_epoch))
+            logging.info('Saving the images now...')
+            for step in range(int(num_steps_per_epoch)):
+                start_time = time.time()
+                predictions_val, filename_val = sess.run([predictions, filenames])
+                time_elapsed = time.time() - start_time
+                logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
+                if step!=0:
+                    total_time = total_time + time_elapsed
                     
+                if save_images:                    
                     for i in xrange(batch_size):
                         segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, dataset)
                         filename = filename_val[i].split('/')
