@@ -164,7 +164,7 @@ def run():
                     filename = photo_dir+"/trainResult_" + filename
                     cv2.imwrite(filename, segmentation)
 
-            return accuracy_value, mean_IOU_value, per_class_accuracy_value
+            return accuracy_value, mean_IOU_value, per_class_accuracy_value, time_elapsed
 
         #Create your summaries
         tf.summary.scalar('Monitor/test_accuracy', accuracy)
@@ -178,21 +178,25 @@ def run():
         #Run the managed session
         with sv.managed_session() as sess:
             
+            total_time = 0
             for step in range(int(num_steps_per_epoch)):                    
                 #Compute summaries every 10 steps and continue evaluating
                 if step % 10 == 0:
-                    test_accuracy, test_mean_IOU, test_per_class_accuracy = eval_step(sess, metrics_op = metrics_op, global_step = sv.global_step)
+                    test_accuracy, test_mean_IOU, test_per_class_accuracy, time_elapsed = eval_step(sess, metrics_op = metrics_op, global_step = sv.global_step)
                     summaries = sess.run(my_summary_op)
                     sv.summary_computed(sess, summaries)
                     
                 #Otherwise just run as per normal
                 else:
-                    test_accuracy, test_mean_IOU, test_per_class_accuracy = eval_step(sess, metrics_op = metrics_op, global_step = sv.global_step)
+                    test_accuracy, test_mean_IOU, test_per_class_accuracy, time_elapsed = eval_step(sess, metrics_op = metrics_op, global_step = sv.global_step)
+                    
+                total_time = total_time + time_elapsed
 
             #At the end of all the evaluation, show the final accuracy
             logging.info('Final Streaming Accuracy: %.4f', test_accuracy)
             logging.info('Final Mean IOU: %.4f', test_mean_IOU)
-            logging.info('Final Per Class Accuracy %.4f', test_per_class_accuracy)
+            logging.info('Final Per Class Accuracy: %.4f', test_per_class_accuracy)
+            logging.info('Average Speed: %.4f fps', batch_size*(num_steps_per_epoch-1)/total_time)
 
             #Show end of evaluation
             logging.info('Finished evaluating!')
