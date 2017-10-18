@@ -24,10 +24,10 @@ flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
 flags.DEFINE_integer('eval_batch_size', 5, 'The batch_size for validation.')
 flags.DEFINE_integer('num_epochs', 300, "The number of epochs to train your model.")
-flags.DEFINE_integer('num_epochs_before_decay', 100, 'The number of epochs before decaying your learning rate.')
+flags.DEFINE_integer('num_epochs_before_decay', 10, 'The number of epochs before decaying your learning rate.')
 flags.DEFINE_float('weight_decay', 2e-4, "The weight decay for ENet convolution layers.")
 flags.DEFINE_float('learning_rate_decay_factor', 1e-1, 'The learning rate decay factor.')
-flags.DEFINE_float('initial_learning_rate', 5e-4, 'The initial learning rate for your training.')
+flags.DEFINE_float('initial_learning_rate', 3e-3, 'The initial learning rate for your training.')
 flags.DEFINE_string('weighting', "MFB", 'Choice of Median Frequency Balancing or the custom ENet class weights.')
 
 #Architectural changes
