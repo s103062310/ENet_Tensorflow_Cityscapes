@@ -42,9 +42,9 @@ def preprocess_ori(image, annotation=None, height=360, width=480):
         # image = tf.cast(image, tf.float32)
 
     image = tf.image.resize_image_with_crop_or_pad(image, height, width)
-    image = tf.image.random_brightness(image, max_delta=63)
-    image = tf.image.random_contrast(image, lower=0.2, upper=1.8)
-    image = tf.image.per_image_standardization(image)
+    #image = tf.image.random_brightness(image, max_delta=63)
+    #image = tf.image.random_contrast(image, lower=0.2, upper=1.8)
+    #image = tf.image.per_image_standardization(image)
     image.set_shape(shape=(height, width, 3))
 
     if not annotation == None:
@@ -262,6 +262,38 @@ def produce_color_segmentation(prediction, height=360, width=480, dataset="CamVi
               [203,  75,  22],    #  3   furniture
               [  7,  54,  66],    #  4   floor
         ]
+    elif dataset=="ADE":
+        class_num = 27
+        color_map = [
+            #   R    G    B         ID   class
+              [  0,   0,   0],    #  0   don't care
+              [102, 102, 156],    #  1   wall
+              [ 70,  70,  70],    #  2   building
+              [ 70, 130, 180],    #  3   sky
+              [  0, 255,   0],    #  4   floor
+              [107, 142,  35],    #  5   tree
+              [250, 170,  30],    #  6   ceiling
+              [190, 153, 153],    #  7   stairs
+              [255,   0,   0],    #  8   furniture
+              [102, 102, 156],    #  9   window          1
+              [152, 251, 152],    # 10   grass
+              [255,   0,   0],    # 11   cabinet         8
+              [244,  35, 232],    # 12   sidewalk
+              [220,  20,  60],    # 13   person
+              [  0, 255,   0],    # 14   ground          4
+              [102, 102, 156],    # 15   door            1
+              [255,   0,   0],    # 16   table           8
+              [128,  64, 128],    # 17   mountain
+              [107, 142,  35],    # 18   plant           5
+              [255,   0,   0],    # 19   curtain         8
+              [255,   0,   0],    # 20   chair           8
+              [  0,   0, 142],    # 21   car
+              [  0,   0, 255],    # 22   water
+              [220, 220,   0],    # 23   painting
+              [255,   0,   0],    # 24   sofa            8
+              [255,   0,   0],    # 25   shelf           8
+              [255, 255, 255],    # 26   others
+        ]
     else:
         logging.info("no specify dataset!")
         sys.exit(0)
@@ -309,6 +341,9 @@ def one_hot(annotations, batch_num, dataset="CamVid"):
         return annotations_one_hot
     elif dataset=="NYU":
         annotations_one_hot = tf.one_hot(annotations, 5, axis=-1)
+        return annotations_one_hot
+    elif dataset=="ADE":
+        annotations_one_hot = tf.one_hot(annotations, 27, axis=-1)
         return annotations_one_hot
     logging.info("one hot transfer error")
     sys.exit(0)

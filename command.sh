@@ -14,6 +14,8 @@ python train_enet.py --weighting="ENET" --num_epochs=300 --logdir="../log/train_
 python train_enet.py --weighting="ENET" --num_epochs=50 --num_classes=20 --image_height=1024 --image_width=2048 --dataset="Cityscapes" --logdir="../log/train_original_ENet_City"
 #NYU
 python train_enet.py --weighting="ENET" --num_epochs=500 --num_classes=5 --image_height=480 --image_width=640 --dataset="NYU" --logdir="../log/train_original_ENet_NYU"
+#ADE
+python train_enet.py --weighting="ENET" --num_epochs=500 --num_classes=27 --image_height=480 --image_width=640 --dataset="ADE" --logdir="../log/train_original_ENet_ADE"
 
 
 # =============== TEST ===============

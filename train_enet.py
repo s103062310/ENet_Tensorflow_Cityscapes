@@ -13,7 +13,7 @@ flags = tf.app.flags
 
 #Directory arguments
 flags.DEFINE_string('logdir', '../log/original', 'The log directory to save your checkpoint and event files.')
-flags.DEFINE_boolean('save_images', True, 'Whether or not to save your images.')
+flags.DEFINE_boolean('save_images', False, 'Whether or not to save your images.')
 flags.DEFINE_boolean('combine_dataset', False, 'If True, combines the validation with the train dataset.')
 flags.DEFINE_string('dataset', "CamVid", 'Which dataset to train')
 
@@ -96,6 +96,13 @@ elif dataset=="NYU":
     image_val_files = os.path.join(dataset_dir, "testing", "*", "*_colors.png")
     annotation_val_files = os.path.join(dataset_dir, "testing", "*", "*_ground_truth_id.png")
 
+elif dataset=="ADE":
+    dataset_dir = "../ADE" #Change dataset location => modify here
+    image_files = os.path.join(dataset_dir, "images", "training", "ADE_train_*.jpg")
+    annotation_files = os.path.join(dataset_dir, "annotations_relabel", "training", "ADE_train_*.png")
+    image_val_files = os.path.join(dataset_dir, "images", "validation", "ADE_val_*.jpg")
+    annotation_val_files = os.path.join(dataset_dir, "annotations_relabel", "validation", "ADE_val_*.png")
+
 #Get complete file path
 image_files = glob.glob(image_files)
 annotation_files = glob.glob(annotation_files)
@@ -127,6 +134,8 @@ if weighting == "MFB":
 elif weighting == "ENET":
     if dataset=="Cityscapes":
         class_weights = [3.0446304066119358, 12.859237726097096, 4.5106188144793764, 38.149414675592844, 35.240414651744551, 31.480455482676099, 45.777966082085818, 39.669614104133458, 6.0674434654058942, 32.15635357347918, 17.129877639929358, 31.579296636222271, 47.339784184712087, 11.602562167110021, 44.596951840626446, 45.23276260758076, 45.280616737115544, 48.148015881262801, 41.924773811374628, 0.0]
+    elif dataset=="ADE":
+        class_weights = [0.0, 5.4675178830470745, 7.4601094583312433, 8.7120767862064774, 11.465808348047995, 13.712429551972468, 14.413321273760605, 15.705530598098903, 22.080140191392989, 23.803016496287306, 24.985279926263889, 25.024199990546769, 26.016846374411703, 26.636528875446555, 27.368116740842485, 30.256841081755546, 31.104755166055948, 31.284902245688205, 32.136032211394443, 31.796023219341777, 31.929518751022876, 32.321876575080822, 35.631894924140624, 36.450061812083817, 36.754749501017052, 37.397204524932938, 37.600648277390256]
     else:
         class_weights = ENet_weighing(annotation_files, num_classes)
     print "========= ENet Class Weights =========\n", class_weights
@@ -238,7 +247,7 @@ def run():
             time_elapsed = time.time() - start_time
 
             #Run the logging to show some results
-            logging.info('global step %s: loss: %.4f (%.2f sec/step)    Current Streaming Accuracy: %.4f    Current Mean IOU: %.4f', global_step_count, total_loss, time_elapsed, accuracy_val, mean_IOU_val)
+            logging.info('global step %s: loss: %.4f (%.2f sec/step)(%.2f fps)    Current Streaming Accuracy: %.4f    Current Mean IOU: %.4f', global_step_count, total_loss, time_elapsed/batch_size, batch_size/time_elapsed, accuracy_val, mean_IOU_val)
 
             return total_loss, accuracy_val, mean_IOU_val
 
@@ -296,7 +305,7 @@ def run():
             time_elapsed = time.time() - start_time
 
             #Log some information
-            logging.info('---VALIDATION--- Validation Accuracy: %.4f    Validation Mean IOU: %.4f    (%.2f sec/step)', accuracy_value, mean_IOU_value, time_elapsed)
+            logging.info('---VALIDATION--- Validation Accuracy: %.4f    Validation Mean IOU: %.4f    (%.2f sec/step)(%.2f fps)', accuracy_value, mean_IOU_value, time_elapsed/eval_batch_size, eval_batch_size/time_elapsed)
 
             return accuracy_value, mean_IOU_value
 
@@ -366,7 +375,7 @@ def run():
                     start_time = time.time()
                     predictions_value, filenames_value = sess.run([predictions_val, filenames_val])
                     time_elapsed = time.time() - start_time
-                    logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, eval_batch_size/time_elapsed)
+                    logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed/eval_batch_size, eval_batch_size/time_elapsed)
                     
                     for i in xrange(eval_batch_size):
                         segmentation = produce_color_segmentation(predictions_value[i], image_height, image_width, dataset)

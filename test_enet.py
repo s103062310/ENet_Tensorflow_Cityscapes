@@ -68,6 +68,11 @@ elif dataset=="NYU":
     dataset_dir = "../NYU"	#Change dataset location => modify here
     image_files = os.path.join(dataset_dir, "training", "*", "*_colors.png")
     annotation_files = os.path.join(dataset_dir, "training", "*", "*_ground_truth_id.png")
+#ADE
+elif dataset=="ADE":
+    dataset_dir = "../ADE" #Change dataset location => modify here
+    image_files = os.path.join(dataset_dir, "images", "training", "ADE_train_*.jpg")
+    annotation_files = os.path.join(dataset_dir, "annotations_relabel", "training", "ADE_train_*.png")
 
 image_files = glob.glob(image_files)
 image_files.sort()
@@ -138,18 +143,15 @@ def run():
             '''
             Simply takes in a session, runs the metrics op and some logging information.
             '''
-            start_time = time.time()
             _, global_step_count, accuracy_value, mean_IOU_value, per_class_accuracy_value = sess.run([metrics_op, global_step_op, accuracy, mean_IOU, per_class_accuracy])
-            time_elapsed = time.time() - start_time
-
-            #Log some information
-            logging.info('Global Step %s: Streaming Accuracy: %.4f     Streaming Mean IOU: %.4f     Per-class Accuracy: %.4f',
-                         global_step_count, accuracy_value, mean_IOU_value, per_class_accuracy_value)
             
             start_time = time.time()
             predictions_val, filename_val = sess.run([predictions, filenames])
             time_elapsed = time.time() - start_time
-            logging.info('\t\t%.2f(sec/step)  %.2f (fps)', time_elapsed, batch_size/time_elapsed)
+
+            #Log some information
+            logging.info('Global Step %s: Streaming Accuracy: %.4f     Streaming Mean IOU: %.4f     Per-class Accuracy: %.4f    %.2f(sec/step)  %.2f (fps)',
+                         global_step_count, accuracy_value, mean_IOU_value, per_class_accuracy_value, time_elapsed/batch_size, batch_size/time_elapsed)
             
             #Save the images
             if save_images:

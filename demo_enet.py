@@ -15,12 +15,13 @@ flags.DEFINE_string('checkpoint_dir', '../log/original', 'The checkpoint directo
 flags.DEFINE_string('photo_dir', '../log/original_test', 'The log directory for event files created during test evaluation.')
 flags.DEFINE_boolean('save_images', True, 'If True, saves 10 images to your for visualization.')
 flags.DEFINE_string('dataset', "CamVid", 'Which dataset to test')
+flags.DEFINE_string('color', "CamVid", 'Color of which dataset to use')
 
 #Evaluation information
 flags.DEFINE_integer('num_classes', 12, 'The number of classes to predict.')
 flags.DEFINE_integer('image_height', 360, "The input height of the images.")
 flags.DEFINE_integer('image_width', 480, "The input width of the images.")
-flags.DEFINE_integer('batch_size', 6, 'The batch_size for testing.')
+flags.DEFINE_integer('batch_size', 11, 'The batch_size for testing.')
 
 #Architectural changes
 flags.DEFINE_integer('num_initial_blocks', 1, 'The number of initial blocks to use in ENet.')
@@ -50,6 +51,7 @@ dataset = FLAGS.dataset
 checkpoint_file = tf.train.latest_checkpoint(checkpoint_dir)
 
 #Dataset directories
+color = dataset
 if dataset=="CamVid":
   dataset_dir = "../dataset"	#Change dataset location => modify here
   image_files = os.path.join(dataset_dir, "val", "*.png")
@@ -59,8 +61,12 @@ elif dataset=="Cityscapes":
 elif dataset=="NYU":
   dataset_dir = "../NYU" #Change dataset location => modify here
   image_files = os.path.join(dataset_dir, "testing", "*", "*_colors.png")
+elif dataset=="ADE":
+  dataset_dir = "../ADE"
+  image_files = os.path.join(dataset_dir, "testing", "ADE_test_*.jpg")
 else:
   image_files = os.path.join("../demo", "*.jpg")
+  color = FLAGS.color
 
 image_files = glob.glob(image_files)
 image_files.sort()
@@ -126,12 +132,12 @@ def run():
                 start_time = time.time()
                 predictions_val, filename_val = sess.run([predictions, filenames])
                 time_elapsed = time.time() - start_time
-                logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed, batch_size/time_elapsed)
+                logging.info('step %d  %.2f(sec/step)  %.2f (fps)', step, time_elapsed/batch_size, batch_size/time_elapsed)
                 total_time = total_time + time_elapsed
                     
                 if save_images:                    
                     for i in xrange(batch_size):
-                        segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, "NYU")
+                        segmentation = produce_color_segmentation(predictions_val[i], image_height, image_width, color)
                         filename = filename_val[i].split('/')
                         filename = filename[len(filename)-1]
                         filename = photo_dir+"/trainResult_" + filename
